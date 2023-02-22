@@ -56,21 +56,21 @@ class MethodChannelQuickBlue extends QuickBluePlatform {
   Stream<dynamic> get scanResultStream => _scanResultStream;
 
   @override
-  void connect(String deviceId) {
-    _method.invokeMethod('connect', {
+  Future<void> connect(String deviceId) async {
+    await _method.invokeMethod('connect', {
       'deviceId': deviceId,
     }).then((_) => _log('connect invokeMethod success'));
   }
 
   @override
-  void disconnect(String deviceId) {
-    _method.invokeMethod('disconnect', {
+  Future<void> disconnect(String deviceId) async {
+    await _method.invokeMethod('disconnect', {
       'deviceId': deviceId,
     }).then((_) => _log('disconnect invokeMethod success'));
   }
 
   @override
-  Future<void> discoverServices(String deviceId) async{
+  Future<void> discoverServices(String deviceId) async {
     await _method.invokeMethod('discoverServices', {
       'deviceId': deviceId,
     }).then((_) => _log('discoverServices invokeMethod success'));
