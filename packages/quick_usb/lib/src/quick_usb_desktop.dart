@@ -15,7 +15,8 @@ late Libusb _libusb;
 class QuickUsbWindows extends _QuickUsbDesktop {
   // For example/.dart_tool/flutter_build/generated_main.dart
   static registerWith() {
-    QuickUsbPlatform.instance = QuickUsbMacos();
+    //replaced QuickUsbMacos(); https://github.com/woodemi/quick.flutter/issues/88
+    QuickUsbPlatform.instance = QuickUsbWindows();
     _libusb = Libusb(DynamicLibrary.open('libusb-1.0.23.dll'));
   }
 }
