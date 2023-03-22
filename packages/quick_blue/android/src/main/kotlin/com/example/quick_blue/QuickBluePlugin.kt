@@ -267,18 +267,19 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       }
     }
 
+    @SuppressLint("SuspiciousIndentation")
     override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
 //      Log.v(TAG, "onServicesDiscovered ${gatt.device.address} $status")
       if (status != BluetoothGatt.GATT_SUCCESS) return
 
-//      gatt.services?.forEach { service ->
+      gatt.services?.forEach { service ->
 //        Log.v(TAG, "Service " + service.uuid)
-//        service.characteristics.forEach { characteristic ->
+        service.characteristics.forEach { characteristic ->
 //          Log.v(TAG, "    Characteristic ${characteristic.uuid}")
-//          characteristic.descriptors.forEach {
+          characteristic.descriptors.forEach {
 //            Log.v(TAG, "        Descriptor ${it.uuid}")
-//          }
-//        }
+          }
+        }
 
         sendMessage(messageConnector, mapOf(
           "deviceId" to gatt.device.address,
