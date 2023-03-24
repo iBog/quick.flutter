@@ -176,6 +176,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   private fun cleanConnection(gatt: BluetoothGatt) {
     knownGatts.remove(gatt)
     gatt.disconnect()
+    // found solution: https://github.com/pauldemarco/flutter_blue/issues/317#issuecomment-522134619
     gatt.close()  // also removes listeners!
   }
 
