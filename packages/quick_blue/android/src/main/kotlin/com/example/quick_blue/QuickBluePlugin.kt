@@ -4,8 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.content.Context
 import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -176,6 +176,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   private fun cleanConnection(gatt: BluetoothGatt) {
     knownGatts.remove(gatt)
     gatt.disconnect()
+    gatt.close()  // also removes listeners!
   }
 
   enum class AvailabilityState(val value: Int) {
