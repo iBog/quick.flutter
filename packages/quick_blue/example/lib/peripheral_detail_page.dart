@@ -58,10 +58,8 @@ class _PeripheralDetailPageState extends State<PeripheralDetailPage> {
         '_handlerWriteValue $deviceId, State : $characteristicId ,Error : $error');
   }
 
-  void _handleConnectionChange(
-      String deviceId, BlueConnectionState state, String? error) {
-    debugPrint(
-        '_handleConnectionChange $deviceId,State : ${state.value} , Error : $error');
+  void _handleConnectionChange(String deviceId, BlueConnectionState state) {
+    debugPrint('_handleConnectionChange $deviceId,State : ${state.value}');
   }
 
   void _handleServiceDiscovery(
