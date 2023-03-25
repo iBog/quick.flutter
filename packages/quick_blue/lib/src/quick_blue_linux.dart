@@ -78,7 +78,7 @@ class QuickBlueLinux extends QuickBluePlatform {
     _log('startScan invoke success');
 
     if (!_activeAdapter!.discovering) {
-      _activeAdapter!.startDiscovery(); //TODO This is async.  Should it be awaited, or should it have error handlers attached?
+      _activeAdapter!.startDiscovery();
       _client.devices.forEach(_onDeviceAdd);
     }
   }
@@ -117,26 +117,21 @@ class QuickBlueLinux extends QuickBluePlatform {
   }
 
   @override
-  Future<void> connect(String deviceId) async {
-    await _findDeviceById(deviceId).connect().then((_) {
+  void connect(String deviceId) {
+    _findDeviceById(deviceId).connect().then((_) {
       onConnectionChanged?.call(deviceId, BlueConnectionState.connected);
     });
-    //TODO :  Listen for Properties Changed event , to update Connection Status on Disconnection from BleDevice ,
-
-    // _findDeviceById(deviceId).propertiesChanged.listen((event) {
-    //     print(event);
-    // });
   }
 
   @override
-  Future<void> disconnect(String deviceId) async {
-    await _findDeviceById(deviceId).disconnect().then((_) {
+  void disconnect(String deviceId) {
+    _findDeviceById(deviceId).disconnect().then((_) {
       onConnectionChanged?.call(deviceId, BlueConnectionState.disconnected);
     });
   }
 
   @override
-  Future<void> discoverServices(String deviceId) async {
+  void discoverServices(String deviceId) {
     var device = _findDeviceById(deviceId);
 
     for (var service in device.gattServices) {
@@ -168,7 +163,7 @@ class QuickBlueLinux extends QuickBluePlatform {
     var c = _getCharacteristic(deviceId, service, characteristic);
     
     if (bleInputProperty != BleInputProperty.disabled) {
-      c.startNotify(); //TODO This is async.  Should it be awaited, or should it have error handlers attached?
+      c.startNotify();
       void onPropertiesChanged(properties) {
         if (properties.contains('Value')) {
           _log('onCharacteristicPropertiesChanged $characteristic, ${hex.encode(c.value)}');
@@ -177,8 +172,8 @@ class QuickBlueLinux extends QuickBluePlatform {
       }
       _characteristicPropertiesSubscriptions[characteristic] ??= c.propertiesChanged.listen(onPropertiesChanged);
     } else {
-      c.stopNotify(); //TODO This is async.  Should it be awaited, or should it have error handlers attached?
-      _characteristicPropertiesSubscriptions.remove(characteristic)?.cancel(); //TODO This is async.  Should it be awaited, or should it have error handlers attached?
+      c.stopNotify();
+      _characteristicPropertiesSubscriptions.remove(characteristic)?.cancel();
     }
   }
 
@@ -194,17 +189,13 @@ class QuickBlueLinux extends QuickBluePlatform {
   @override
   Future<void> writeValue(String deviceId, String service, String characteristic, Uint8List value, BleOutputProperty bleOutputProperty) async {
     var c = _getCharacteristic(deviceId, service, characteristic);
-    try{
-      if (bleOutputProperty == BleOutputProperty.withResponse) {
-        await c.writeValue(value, type: BlueZGattCharacteristicWriteType.request);
-      } else {
-        await c.writeValue(value, type: BlueZGattCharacteristicWriteType.command);
-      }
-      _log('writeValue $characteristic, ${hex.encode(value)}');
-      onWrite?.call(deviceId,characteristic,null);
-    }catch(e){
-      onWrite?.call(deviceId,characteristic,e.toString());
+
+    if (bleOutputProperty == BleOutputProperty.withResponse) {
+      await c.writeValue(value, type: BlueZGattCharacteristicWriteType.request);
+    } else {
+      await c.writeValue(value, type: BlueZGattCharacteristicWriteType.command);
     }
+    _log('writeValue $characteristic, ${hex.encode(value)}');
   }
 
   @override
