@@ -44,10 +44,10 @@ flutter:
         pluginClass: QuickBluePlugin
       macos:
         pluginClass: QuickBluePlugin
-#      windows:
-#        pluginClass: QuickBluePlugin
-#      linux:
-#        dartPluginClass: QuickBlueLinux
+      windows:
+        pluginClass: QuickBluePlugin
+      linux:
+        dartPluginClass: QuickBlueLinux
     # -------------------
 
   # To add assets to your plugin package, add an assets section, like this:
