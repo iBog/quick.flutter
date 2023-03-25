@@ -11,7 +11,7 @@ export 'models.dart';
 
 typedef QuickLogger = Logger;
 
-typedef OnConnectionChanged = void Function(String deviceId, BlueConnectionState state,String? error);
+typedef OnConnectionChanged = void Function(String deviceId, BlueConnectionState state);
 
 typedef OnServiceDiscovered = void Function(String deviceId, String serviceId, List<String> characteristicIds);
 
@@ -45,13 +45,13 @@ abstract class QuickBluePlatform extends PlatformInterface {
 
   Stream<dynamic> get scanResultStream;
 
-  Future<void> connect(String deviceId);
+  void connect(String deviceId);
 
-  Future<void> disconnect(String deviceId);
+  void disconnect(String deviceId);
 
   OnConnectionChanged? onConnectionChanged;
 
-  Future<void> discoverServices(String deviceId);
+  void discoverServices(String deviceId);
 
   OnServiceDiscovered? onServiceDiscovered;
 

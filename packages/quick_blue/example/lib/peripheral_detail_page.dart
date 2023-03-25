@@ -52,20 +52,28 @@ class _PeripheralDetailPageState extends State<PeripheralDetailPage> {
     QuickBlue.setWriteValueHandler(null);
   }
 
-  void _handlerWriteValue(String deviceId, String characteristicId, String? error) {
-    debugPrint('_handlerWriteValue $deviceId, State : $characteristicId ,Error : $error');
+  void _handlerWriteValue(
+      String deviceId, String characteristicId, String? error) {
+    debugPrint(
+        '_handlerWriteValue $deviceId, State : $characteristicId ,Error : $error');
   }
 
-  void _handleConnectionChange(String deviceId, BlueConnectionState state,String? error) {
-    debugPrint('_handleConnectionChange $deviceId,State : ${state.value} , Error : $error');
+  void _handleConnectionChange(
+      String deviceId, BlueConnectionState state, String? error) {
+    debugPrint(
+        '_handleConnectionChange $deviceId,State : ${state.value} , Error : $error');
   }
 
-  void _handleServiceDiscovery(String deviceId, String serviceId, List<String> characteristicIds) {
-    debugPrint('_handleServiceDiscovery $deviceId, $serviceId, $characteristicIds');
+  void _handleServiceDiscovery(
+      String deviceId, String serviceId, List<String> characteristicIds) {
+    debugPrint(
+        '_handleServiceDiscovery $deviceId, $serviceId, $characteristicIds');
   }
 
-  void _handleValueChange(String deviceId, String characteristicId, Uint8List value) {
-    debugPrint('_handleValueChange $deviceId, $characteristicId, ${hex.encode(value)}');
+  void _handleValueChange(
+      String deviceId, String characteristicId, Uint8List value) {
+    debugPrint(
+        '_handleValueChange $deviceId, $characteristicId, ${hex.encode(value)}');
   }
 
   final serviceUUID = TextEditingController(text: WOODEMI_SERV__COMMAND);
@@ -113,9 +121,8 @@ class _PeripheralDetailPageState extends State<PeripheralDetailPage> {
           ElevatedButton(
             child: const Text('setNotifiable'),
             onPressed: () {
-              QuickBlue.setNotifiable(
-                  widget.deviceId, WOODEMI_SERV__COMMAND, WOODEMI_CHAR__COMMAND_RESPONSE,
-                  BleInputProperty.indication);
+              QuickBlue.setNotifiable(widget.deviceId, WOODEMI_SERV__COMMAND,
+                  WOODEMI_CHAR__COMMAND_RESPONSE, BleInputProperty.indication);
             },
           ),
           TextField(
@@ -141,23 +148,25 @@ class _PeripheralDetailPageState extends State<PeripheralDetailPage> {
             onPressed: () {
               var value = Uint8List.fromList(hex.decode(binaryCode.text));
               QuickBlue.writeValue(
-                  widget.deviceId, serviceUUID.text, characteristicUUID.text,
-                  value, BleOutputProperty.withResponse);
+                  widget.deviceId,
+                  serviceUUID.text,
+                  characteristicUUID.text,
+                  value,
+                  BleOutputProperty.withResponse);
             },
           ),
           ElevatedButton(
             child: const Text('readValue battery'),
             onPressed: () async {
               await QuickBlue.readValue(
-                  widget.deviceId,
-                  GSS_SERV__BATTERY,
-                  GSS_CHAR__BATTERY_LEVEL);
+                  widget.deviceId, GSS_SERV__BATTERY, GSS_CHAR__BATTERY_LEVEL);
             },
           ),
           ElevatedButton(
             child: const Text('requestMtu'),
             onPressed: () async {
-              var mtu = await QuickBlue.requestMtu(widget.deviceId, WOODEMI_MTU_WUART);
+              var mtu = await QuickBlue.requestMtu(
+                  widget.deviceId, WOODEMI_MTU_WUART);
               debugPrint('requestMtu $mtu');
             },
           ),

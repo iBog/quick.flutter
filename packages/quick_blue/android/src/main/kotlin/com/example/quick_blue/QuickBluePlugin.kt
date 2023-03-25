@@ -4,8 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -73,8 +73,6 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     mainThreadHandler.post { messageChannel.send(message) }
   }
 
-  fun trace() = Arrays.toString(Throwable().stackTrace)
-
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     when (call.method) {
       "isBluetoothAvailable" -> {
@@ -106,7 +104,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       "disconnect" -> {
         val deviceId = call.argument<String>("deviceId")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
-                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", trace())
+                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         cleanConnection(gatt)
         result.success(null)
         //FIXME If `disconnect` is called before BluetoothGatt.STATE_CONNECTED
@@ -115,7 +113,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       "discoverServices" -> {
         val deviceId = call.argument<String>("deviceId")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
-                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", trace())
+                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         gatt.discoverServices()
         result.success(null)
       }
@@ -125,9 +123,9 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val characteristic = call.argument<String>("characteristic")!!
         val bleInputProperty = call.argument<String>("bleInputProperty")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
-                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", trace())
+                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         val c = gatt.getCharacteristic(service, characteristic)
-                ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", trace())
+                ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", null)
         gatt.setNotifiable(c, bleInputProperty)
         result.success(null)
       }
@@ -136,13 +134,13 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val service = call.argument<String>("service")!!
         val characteristic = call.argument<String>("characteristic")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
-                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", trace())
+                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         val c = gatt.getCharacteristic(service, characteristic)
-                ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", trace())
+                ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", null)
         if (gatt.readCharacteristic(c))
           result.success(null)
         else
-          result.error("Characteristic unavailable", null, trace())
+          result.error("Characteristic unavailable", null, null)
       }
       "writeValue" -> {
         val deviceId = call.argument<String>("deviceId")!!
@@ -150,20 +148,20 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val characteristic = call.argument<String>("characteristic")!!
         val value = call.argument<ByteArray>("value")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
-                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", trace())
+                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         val c = gatt.getCharacteristic(service, characteristic)
-                ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", trace())
+                ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", null)
         c.value = value
         if (gatt.writeCharacteristic(c))
           result.success(null)
         else
-          result.error("Characteristic unavailable", null, trace())
+          result.error("Characteristic unavailable", null, null)
       }
       "requestMtu" -> {
         val deviceId = call.argument<String>("deviceId")!!
         val expectedMtu = call.argument<Int>("expectedMtu")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
-                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", trace())
+                ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         gatt.requestMtu(expectedMtu)
         result.success(null)
       }
@@ -214,7 +212,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
 
     override fun onScanResult(callbackType: Int, result: ScanResult) {
-//      Log.v(TAG, "onScanResult: $callbackType + $result")
+      Log.v(TAG, "onScanResult: $callbackType + $result")
       scanResultSink?.success(mapOf<String, Any>(
               "name" to (result.device.name ?: ""),
               "deviceId" to result.device.address,
@@ -224,7 +222,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
 
     override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-//      Log.v(TAG, "onBatchScanResults: $results")
+      Log.v(TAG, "onBatchScanResults: $results")
     }
   }
 
@@ -252,34 +250,31 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
 
   private val gattCallback = object : BluetoothGattCallback() {
     override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-//      Log.v(TAG, "onConnectionStateChange: device(${gatt.device.address}) status($status), newState($newState)")
+      Log.v(TAG, "onConnectionStateChange: device(${gatt.device.address}) status($status), newState($newState)")
       if (newState == BluetoothGatt.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
         sendMessage(messageConnector, mapOf(
           "deviceId" to gatt.device.address,
           "ConnectionState" to "connected"
         ))
       } else {
-        // TODO Parse status code and send correct error messages
         cleanConnection(gatt)
         sendMessage(messageConnector, mapOf(
           "deviceId" to gatt.device.address,
-          "ConnectionState" to "disconnected",
-          "error" to "Disconnection Reason : Status $status"
+          "ConnectionState" to "disconnected"
         ))
       }
     }
 
-    @SuppressLint("SuspiciousIndentation")
     override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-//      Log.v(TAG, "onServicesDiscovered ${gatt.device.address} $status")
+      Log.v(TAG, "onServicesDiscovered ${gatt.device.address} $status")
       if (status != BluetoothGatt.GATT_SUCCESS) return
 
       gatt.services?.forEach { service ->
-//        Log.v(TAG, "Service " + service.uuid)
+        Log.v(TAG, "Service " + service.uuid)
         service.characteristics.forEach { characteristic ->
-//          Log.v(TAG, "    Characteristic ${characteristic.uuid}")
+          Log.v(TAG, "    Characteristic ${characteristic.uuid}")
           characteristic.descriptors.forEach {
-//            Log.v(TAG, "        Descriptor ${it.uuid}")
+            Log.v(TAG, "        Descriptor ${it.uuid}")
           }
         }
 
@@ -301,7 +296,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
 
     override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-//      Log.v(TAG, "onCharacteristicRead ${characteristic.uuid}, ${characteristic.value.contentToString()}")
+      Log.v(TAG, "onCharacteristicRead ${characteristic.uuid}, ${characteristic.value.contentToString()}")
       sendMessage(messageConnector, mapOf(
         "deviceId" to gatt.device.address,
         "characteristicValue" to mapOf(
@@ -312,18 +307,11 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
 
     override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic, status: Int) {
-//      Log.v(TAG, "onCharacteristicWrite ${characteristic.uuid}, ${characteristic.value.contentToString()} $status")
-      val deviceID = gatt?.device?.address ?: ""
-      // TODO Parse status code and send correct error messages
-      sendMessage(messageConnector, mapOf(
-        "deviceId" to deviceID,
-        "characteristic" to characteristic.uuid.toString(),
-        "error" to "Write Command Status : $status"
-      ))
+      Log.v(TAG, "onCharacteristicWrite ${characteristic.uuid}, ${characteristic.value.contentToString()} $status")
     }
 
     override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-//      Log.v(TAG, "onCharacteristicChanged ${characteristic.uuid}, ${characteristic.value.contentToString()}")
+      Log.v(TAG, "onCharacteristicChanged ${characteristic.uuid}, ${characteristic.value.contentToString()}")
       sendMessage(messageConnector, mapOf(
         "deviceId" to gatt.device.address,
         "characteristicValue" to mapOf(
