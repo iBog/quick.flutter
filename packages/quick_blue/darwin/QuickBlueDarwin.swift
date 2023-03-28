@@ -170,7 +170,7 @@ public class QuickBlueDarwin: NSObject, FlutterPlugin {
       }
       result(nil)
       let mtu = peripheral.maximumWriteValueLength(for: .withoutResponse)
-      print("peripheral.maximumWriteValueLengthForType:CBCharacteristicWriteWithoutResponse \(mtu)")
+//      print("peripheral.maximumWriteValueLengthForType:CBCharacteristicWriteWithoutResponse \(mtu)")
       messageConnector.sendMessage(["mtuConfig": mtu + GATT_HEADER_LENGTH])
     default:
       result(FlutterMethodNotImplemented)
@@ -184,7 +184,7 @@ extension QuickBlueDarwin: CBCentralManagerDelegate {
   }
 
   public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-    print("centralManager:didDiscoverPeripheral \(peripheral.name ?? "nil") \(peripheral.uuid.uuidString)")
+//    print("centralManager:didDiscoverPeripheral \(peripheral.name ?? "nil") \(peripheral.uuid.uuidString)")
     discoveredPeripherals[peripheral.uuid.uuidString] = peripheral
 
     let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
@@ -197,7 +197,7 @@ extension QuickBlueDarwin: CBCentralManagerDelegate {
   }
 
   public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-    print("centralManager:didConnect \(peripheral.uuid.uuidString)")
+//    print("centralManager:didConnect \(peripheral.uuid.uuidString)")
     messageConnector.sendMessage([
       "deviceId": peripheral.uuid.uuidString,
       "ConnectionState": "connected",
@@ -205,7 +205,7 @@ extension QuickBlueDarwin: CBCentralManagerDelegate {
   }
     
   public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-    print("centralManager:didDisconnectPeripheral: \(peripheral.uuid.uuidString) error: \(String(describing: error))")
+//    print("centralManager:didDisconnectPeripheral: \(peripheral.uuid.uuidString) error: \(String(describing: error))")
     messageConnector.sendMessage([
       "deviceId": peripheral.uuid.uuidString,
       "ConnectionState": "disconnected",
@@ -218,7 +218,7 @@ extension QuickBlueDarwin: FlutterStreamHandler {
     guard let args = arguments as? Dictionary<String, Any>, let name = args["name"] as? String else {
       return nil
     }
-    print("QuickBlueDarwin onListenWithArguments: \(name)")
+//    print("QuickBlueDarwin onListenWithArguments: \(name)")
     if name == "availabilityChange" {
       availabilityChangeSink = events
       availabilityChangeSink?(manager.state.rawValue) // Initializes CBCentralManager and returns the current state when hot restarting
@@ -232,7 +232,7 @@ extension QuickBlueDarwin: FlutterStreamHandler {
     guard let args = arguments as? Dictionary<String, Any>, let name = args["name"] as? String else {
       return nil
     }
-    print("QuickBlueDarwin onCancelWithArguments: \(name)")
+    //print("QuickBlueDarwin onCancelWithArguments: \(name)")
     if name == "availabilityChange" {
       availabilityChangeSink = nil
     } else if name == "scanResult" {
@@ -244,16 +244,16 @@ extension QuickBlueDarwin: FlutterStreamHandler {
 
 extension QuickBlueDarwin: CBPeripheralDelegate {
   public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-    print("peripheral: \(peripheral.uuid.uuidString) didDiscoverServices error: \(String(describing: error))")
+    //print("peripheral: \(peripheral.uuid.uuidString) didDiscoverServices error: \(String(describing: error))")
     for service in peripheral.services! {
       peripheral.discoverCharacteristics(nil, for: service)
     }
   }
     
   public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-    for characteristic in service.characteristics! {
-      print("peripheral:didDiscoverCharacteristicsForService (\(service.uuid.uuidStr), \(characteristic.uuid.uuidStr)")
-    }
+//    for characteristic in service.characteristics! {
+//      print("peripheral:didDiscoverCharacteristicsForService (\(service.uuid.uuidStr), \(characteristic.uuid.uuidStr)")
+//    }
     self.messageConnector.sendMessage([
       "deviceId": peripheral.uuid.uuidString,
       "ServiceState": "discovered",
@@ -264,12 +264,12 @@ extension QuickBlueDarwin: CBPeripheralDelegate {
 
   public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
     let data = characteristic.value as NSData?
-    print("peripheral:didWriteValueForCharacteristic \(characteristic.uuid.uuidStr) \(String(describing: data)) error: \(String(describing: error))")
+//    print("peripheral:didWriteValueForCharacteristic \(characteristic.uuid.uuidStr) \(String(describing: data)) error: \(String(describing: error))")
   }
 
   public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
     let data = characteristic.value as NSData?
-    print("peripheral:didUpdateValueForCharacteristic \(characteristic.uuid) \(String(describing: data)) error: \(String(describing: error))")
+//    print("peripheral:didUpdateValueForCharacteristic \(characteristic.uuid) \(String(describing: data)) error: \(String(describing: error))")
     self.messageConnector.sendMessage([
       "deviceId": peripheral.uuid.uuidString,
       "characteristicValue": [
