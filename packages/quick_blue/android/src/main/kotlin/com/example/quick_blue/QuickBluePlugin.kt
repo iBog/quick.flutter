@@ -55,8 +55,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   }
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-    bluetoothManager.adapter.bluetoothLeScanner?.stopScan(scanCallback)
-
+    bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback)
     context.unregisterReceiver(broadcastReceiver)
     eventAvailabilityChange.setStreamHandler(null)
     eventScanResult.setStreamHandler(null)
