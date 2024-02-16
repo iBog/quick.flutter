@@ -4,8 +4,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.content.Context
 import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
@@ -16,7 +16,6 @@ import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.*
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.*
@@ -294,13 +293,18 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       }
     }
 
-    override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+    override fun onCharacteristicRead(
+      gatt: BluetoothGatt,
+      characteristic: BluetoothGattCharacteristic,
+      value: ByteArray,
+      status: Int
+    ) {
 //      Log.v(TAG, "onCharacteristicRead ${characteristic.uuid}, ${characteristic.value.contentToString()}")
       sendMessage(messageConnector, mapOf(
         "deviceId" to gatt.device.address,
         "characteristicValue" to mapOf(
           "characteristic" to characteristic.uuid.toString(),
-          "value" to characteristic.value
+          "value" to value
         )
       ))
     }
@@ -309,13 +313,17 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       Log.v(TAG, "onCharacteristicWrite ${characteristic.uuid}, ${characteristic.value.contentToString()} $status")
     }
 
-    override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+    override fun onCharacteristicChanged(
+      gatt: BluetoothGatt,
+      characteristic: BluetoothGattCharacteristic,
+      value: ByteArray
+    ) {
 //      Log.v(TAG, "onCharacteristicChanged ${characteristic.uuid}, ${characteristic.value.contentToString()}")
       sendMessage(messageConnector, mapOf(
         "deviceId" to gatt.device.address,
         "characteristicValue" to mapOf(
           "characteristic" to characteristic.uuid.toString(),
-          "value" to characteristic.value
+          "value" to value
         )
       ))
     }
