@@ -85,9 +85,9 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
           printConnectedDevices(bluetoothManager)
           var gatt: BluetoothGatt? = null
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-              gatt = btDevices.first().connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+              gatt = btDevices.first().connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
           } else {
-              gatt = btDevices.first().connectGatt(context, false, gattCallback)
+              gatt = btDevices.first().connectGatt(context, true, gattCallback)
           }
           gatt?.let { knownGatts.add(it) }
           result.success(null)
@@ -108,9 +108,9 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId as String)
         var gatt: BluetoothGatt? = null
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-             gatt = remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+             gatt = remoteDevice.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
-             gatt = remoteDevice.connectGatt(context, false, gattCallback)
+             gatt = remoteDevice.connectGatt(context, true, gattCallback)
         }
         gatt?.let { knownGatts.add(it) }
         result.success(null)
