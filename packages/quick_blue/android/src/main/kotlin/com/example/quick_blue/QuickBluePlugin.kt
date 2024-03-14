@@ -91,7 +91,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
           }
           gatt?.let { knownGatts.add(it) }
           result.success(null)
-        }else {
+        } else {
           bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
           result.success(null)
         }
@@ -243,12 +243,29 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
 
     override fun onScanResult(callbackType: Int, result: ScanResult) {
       Log.v(TAG, "onScanResult: $callbackType + $result")
-      scanResultSink?.success(mapOf<String, Any>(
-              "name" to (result.device.name ?: ""),
-              "deviceId" to result.device.address,
-              "manufacturerDataHead" to (result.manufacturerDataHead ?: byteArrayOf()),
-              "rssi" to result.rssi
-      ))
+      //return cached device if exists, return cached device randomly to have ability scan and connect to new devices
+      var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+      val randomValue = kotlin.random.Random.nextInt(2)
+      if (btDevices.isNotEmpty() && randomValue==1) {
+        var gatt: BluetoothGatt? = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+          gatt = btDevices.first().connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        } else {
+          gatt = btDevices.first().connectGatt(context, true, gattCallback)
+        }
+        gatt?.let { knownGatts.add(it) }
+        scanResultSink?.success(mapOf<String, Any>(
+          "name" to (gatt.device.name ?: ""),
+          "deviceId" to gatt.device.address,
+        ))
+      } else {
+        scanResultSink?.success(mapOf<String, Any>(
+          "name" to (result.device.name ?: ""),
+          "deviceId" to result.device.address,
+          "manufacturerDataHead" to (result.manufacturerDataHead ?: byteArrayOf()),
+          "rssi" to result.rssi
+        ))
+      }
     }
 
     override fun onBatchScanResults(results: MutableList<ScanResult>?) {
