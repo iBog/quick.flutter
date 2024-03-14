@@ -79,9 +79,22 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         result.success(bluetoothManager.adapter?.isEnabled?:false)
       }
       "startScan" -> {
-        printConnectedDevices(bluetoothManager)
-        bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
-        result.success(null)
+        var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+        if (btDevices.isNotEmpty()) {
+          //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
+          printConnectedDevices(bluetoothManager)
+          var gatt: BluetoothGatt? = null
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+              gatt = btDevices.first().connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+          } else {
+              gatt = btDevices.first().connectGatt(context, false, gattCallback)
+          }
+          gatt?.let { knownGatts.add(it) }
+          result.success(null)
+        }else {
+          bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
+          result.success(null)
+        }
       }
       "stopScan" -> {
         bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback)
@@ -93,12 +106,13 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
           return result.success(null)
         }
         val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId as String)
-        val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-          remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+        var gatt: BluetoothGatt? = null
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+             gatt = remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
-          remoteDevice.connectGatt(context, false, gattCallback)
+             gatt = remoteDevice.connectGatt(context, false, gattCallback)
         }
-        knownGatts.add(gatt)
+        gatt?.let { knownGatts.add(it) }
         result.success(null)
       }
       "disconnect" -> {
@@ -190,8 +204,8 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
 
   @SuppressLint("MissingPermission")
   private fun printConnectedDevices(bluetoothManager: BluetoothManager) {
-    val btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
-    Log.v(TAG, "Currently connected devices: $btDevices")
+    var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+    Log.v(TAG, "Currently BLE connected devices: $btDevices")
   }
 
   enum class AvailabilityState(val value: Int) {
