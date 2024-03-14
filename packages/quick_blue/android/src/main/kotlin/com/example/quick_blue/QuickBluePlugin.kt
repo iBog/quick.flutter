@@ -250,6 +250,8 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         scanResultSink?.success(mapOf<String, Any>(
           "name" to (btDevices.first().name ?: ""),
           "deviceId" to btDevices.first().address,
+          "manufacturerDataHead" to (result.manufacturerDataHead ?: byteArrayOf()) ,
+          "rssi" to result.rssi
         ))
       } else {
         scanResultSink?.success(mapOf<String, Any>(
