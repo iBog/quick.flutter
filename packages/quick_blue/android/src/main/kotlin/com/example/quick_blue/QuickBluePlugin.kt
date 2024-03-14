@@ -90,7 +90,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         if (knownGatts.find { it.device.address == deviceId } != null) {
           return result.success(null)
         }
-        val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId)
+        val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId as String)
         val gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
           remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
@@ -98,7 +98,6 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         }
         knownGatts.add(gatt)
         result.success(null)
-        // TODO connecting
       }
       "disconnect" -> {
         val deviceId = call.argument<String>("deviceId")!!
@@ -106,8 +105,6 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
                 ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         cleanConnection(gatt)
         result.success(null)
-        //FIXME If `disconnect` is called before BluetoothGatt.STATE_CONNECTED
-        // there will be no `disconnected` message any more
       }
       "discoverServices" -> {
         val deviceId = call.argument<String>("deviceId")!!
