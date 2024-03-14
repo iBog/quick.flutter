@@ -79,6 +79,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         result.success(bluetoothManager.adapter?.isEnabled?:false)
       }
       "startScan" -> {
+        printConnectedDevices(bluetoothManager)
         bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
         result.success(null)
       }
@@ -180,11 +181,17 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       knownGatts.remove(gatt)
       gatt.disconnect()
     } catch (e: Exception) {
-      Log.v("Bluetooth", "Error during BLE cleanConnection:", e)
+      Log.v(TAG, "Error during BLE cleanConnection:", e)
     } finally {
       gatt.close()
-      Log.v("Bluetooth", "BLE Gatt free up resources success")
+      Log.v(TAG, "BLE Gatt free up resources success")
     }
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun printConnectedDevices(bluetoothManager: BluetoothManager) {
+    val btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+    Log.v(TAG, "Currently connected devices: $btDevices")
   }
 
   enum class AvailabilityState(val value: Int) {
