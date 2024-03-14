@@ -15,9 +15,8 @@ import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.*
-import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.*
@@ -151,8 +150,15 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
                 ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         val c = gatt.getCharacteristic(service, characteristic)
                 ?: return result.error("IllegalArgument", "Unknown characteristic: $characteristic", null)
-        c.value = value
-        if (gatt.writeCharacteristic(c))
+
+        var writeResult = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          writeResult = gatt.writeCharacteristic(c, value, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) == BluetoothStatusCodes.SUCCESS
+        }else{
+          c.value = value
+          writeResult = gatt.writeCharacteristic(c)
+        }
+        if (writeResult)
           result.success(null)
         else
           result.error("Characteristic unavailable", null, null)
@@ -172,10 +178,15 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   }
 
   private fun cleanConnection(gatt: BluetoothGatt) {
-    knownGatts.remove(gatt)
-    gatt.disconnect()
-    // found solution: https://github.com/pauldemarco/flutter_blue/issues/317#issuecomment-522134619
-    gatt.close()  // also removes listeners!
+    try {
+      knownGatts.remove(gatt)
+      gatt.disconnect()
+    } catch (e: Exception) {
+      Log.v("Bluetooth", "Error during BLE cleanConnection:", e)
+    } finally {
+      gatt.close()
+      Log.v("Bluetooth", "BLE Gatt free up resources success")
+    }
   }
 
   enum class AvailabilityState(val value: Int) {
