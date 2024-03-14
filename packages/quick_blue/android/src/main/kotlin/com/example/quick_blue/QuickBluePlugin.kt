@@ -247,16 +247,9 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
       val randomValue = kotlin.random.Random.nextInt(2)
       if (btDevices.isNotEmpty() && randomValue==1) {
-        var gatt: BluetoothGatt? = null
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-          gatt = btDevices.first().connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-          gatt = btDevices.first().connectGatt(context, true, gattCallback)
-        }
-        gatt?.let { knownGatts.add(it) }
         scanResultSink?.success(mapOf<String, Any>(
-          "name" to (gatt.device.name ?: ""),
-          "deviceId" to gatt.device.address,
+          "name" to (btDevices.first().name ?: ""),
+          "deviceId" to btDevices.first().address,
         ))
       } else {
         scanResultSink?.success(mapOf<String, Any>(
