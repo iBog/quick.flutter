@@ -79,22 +79,10 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         result.success(bluetoothManager.adapter?.isEnabled?:false)
       }
       "startScan" -> {
-        var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
-        if (btDevices.isNotEmpty()) {
-          //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
-          printConnectedDevices(bluetoothManager)
-          var gatt: BluetoothGatt? = null
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-              gatt = btDevices.first().connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
-          } else {
-              gatt = btDevices.first().connectGatt(context, true, gattCallback)
-          }
-          gatt?.let { knownGatts.add(it) }
-          result.success(null)
-        } else {
+        //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
+        var btDevices = getConnectedDevices(bluetoothManager)
           bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
           result.success(null)
-        }
       }
       "stopScan" -> {
         bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback)
@@ -108,9 +96,9 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId as String)
         var gatt: BluetoothGatt? = null
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-             gatt = remoteDevice.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+             gatt = remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         } else {
-             gatt = remoteDevice.connectGatt(context, true, gattCallback)
+             gatt = remoteDevice.connectGatt(context, false, gattCallback)
         }
         gatt?.let { knownGatts.add(it) }
         result.success(null)
@@ -119,7 +107,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val deviceId = call.argument<String>("deviceId")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
                 ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
-        cleanConnection(gatt)
+        stopConnection(gatt)
         result.success(null)
       }
       "discoverServices" -> {
@@ -134,6 +122,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         val service = call.argument<String>("service")!!
         val characteristic = call.argument<String>("characteristic")!!
         val bleInputProperty = call.argument<String>("bleInputProperty")!!
+        Log.v(TAG, "setNotifiable, deviceId: $deviceId, service: $service, characteristic: $characteristic")
         val gatt = knownGatts.find { it.device.address == deviceId }
                 ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
         val c = gatt.getCharacteristic(service, characteristic)
@@ -190,9 +179,8 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
   }
 
-  private fun cleanConnection(gatt: BluetoothGatt) {
+  private fun stopConnection(gatt: BluetoothGatt) {
     try {
-      knownGatts.remove(gatt)
       gatt.disconnect()
     } catch (e: Exception) {
       Log.v(TAG, "Error during BLE cleanConnection:", e)
@@ -203,9 +191,10 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   }
 
   @SuppressLint("MissingPermission")
-  private fun printConnectedDevices(bluetoothManager: BluetoothManager) {
+  private fun getConnectedDevices(bluetoothManager: BluetoothManager): List<BluetoothDevice> {
     var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
     Log.v(TAG, "Currently BLE connected devices: $btDevices")
+    return btDevices
   }
 
   enum class AvailabilityState(val value: Int) {
@@ -242,18 +231,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
 
     override fun onScanResult(callbackType: Int, result: ScanResult) {
-      Log.v(TAG, "onScanResult: $callbackType + $result")
-      //return cached device if exists, return cached device randomly to have ability scan and connect to new devices
-      var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
-      val randomValue = kotlin.random.Random.nextInt(2)
-      if (btDevices.isNotEmpty() && randomValue==1) {
-        scanResultSink?.success(mapOf<String, Any>(
-          "name" to (btDevices.first().name ?: ""),
-          "deviceId" to btDevices.first().address,
-          "manufacturerDataHead" to (result.manufacturerDataHead ?: byteArrayOf()) ,
-          "rssi" to result.rssi
-        ))
-      } else {
+//      Log.v(TAG, "onScanResult: $callbackType + $result")
         scanResultSink?.success(mapOf<String, Any>(
           "name" to (result.device.name ?: ""),
           "deviceId" to result.device.address,
@@ -261,7 +239,6 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
           "rssi" to result.rssi
         ))
       }
-    }
 
     override fun onBatchScanResults(results: MutableList<ScanResult>?) {
       Log.v(TAG, "onBatchScanResults: $results")
@@ -299,7 +276,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
           "ConnectionState" to "connected"
         ))
       } else {
-        cleanConnection(gatt)
+        knownGatts.remove(gatt)
         sendMessage(messageConnector, mapOf(
           "deviceId" to gatt.device.address,
           "ConnectionState" to "disconnected"
@@ -397,6 +374,12 @@ fun BluetoothGatt.setNotifiable(gattCharacteristic: BluetoothGattCharacteristic,
     "indication" -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE to true
     else -> BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE to false
   }
-  descriptor.value = value
-  setCharacteristicNotification(descriptor.characteristic, enable) && writeDescriptor(descriptor)
+  // Enable or disable notifications/indications for the characteristic
+  val isNotificationSet = setCharacteristicNotification(descriptor.characteristic, enable)
+  Log.v(TAG, "setNotifiable, setCharacteristicNotification success: $isNotificationSet")
+  // If notifications were successfully set, write the descriptor back to the server
+  if (isNotificationSet) {
+    val isDescriptorWritten = writeDescriptor(descriptor, value)
+    Log.v(TAG, "setNotifiable, writeDescriptor success: $isNotificationSet, isWritten: $isDescriptorWritten")
+  }
 }
