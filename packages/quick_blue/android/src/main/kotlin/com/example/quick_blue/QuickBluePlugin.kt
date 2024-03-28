@@ -2,8 +2,10 @@ package com.example.quick_blue
 
 import android.annotation.SuppressLint
 import android.bluetooth.*
+import android.bluetooth.BluetoothDevice.TRANSPORT_LE
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,6 +20,7 @@ import io.flutter.plugin.common.*
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import java.lang.reflect.Method
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.*
@@ -80,9 +83,19 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       }
       "startScan" -> {
         //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
-        var btDevices = getConnectedDevices(bluetoothManager)
-          bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
+        getConnectedDevices(bluetoothManager)
+        getBondedDevices(bluetoothManager)
+//        if (connected) {
+//          connectToDevice("88:4A:EA:82:B0:6A")
+//          result.success(null)
+//        } else {
+          val builder = ScanSettings.Builder()
+          builder.setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+          builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+          bluetoothManager.adapter?.bluetoothLeScanner?.startScan(emptyList(), builder.build(), scanCallback)
+//          bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
           result.success(null)
+//        }
       }
       "stopScan" -> {
         bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback)
@@ -93,21 +106,14 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         if (knownGatts.find { it.device.address == deviceId } != null) {
           return result.success(null)
         }
-        val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId as String)
-        var gatt: BluetoothGatt? = null
-          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-             gatt = remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-             gatt = remoteDevice.connectGatt(context, false, gattCallback)
-        }
-        gatt?.let { knownGatts.add(it) }
+        connectToDevice(deviceId)
         result.success(null)
       }
       "disconnect" -> {
         val deviceId = call.argument<String>("deviceId")!!
         val gatt = knownGatts.find { it.device.address == deviceId }
                 ?: return result.error("IllegalArgument", "Unknown deviceId: $deviceId", null)
-        stopConnection(gatt)
+        gatt.disconnect()
         result.success(null)
       }
       "discoverServices" -> {
@@ -179,14 +185,143 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
   }
 
-  private fun stopConnection(gatt: BluetoothGatt) {
+  private fun isDeviceConnected():Boolean {
+    var btDevices = getConnectedDevices(bluetoothManager)
+    if (btDevices.find { it.address == "88:4A:EA:82:B0:6A" } != null) {
+      return true
+    }
+    return false
+  }
+
+  private fun connectToDevice(deviceId: String){
+    val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId)
+      val deviceType: Int = remoteDevice.getType()
+    if(deviceType == BluetoothDevice.DEVICE_TYPE_UNKNOWN) {
+      Log.v(TAG, "BLE device: $deviceId was not cached")
+    } else {
+      Log.v(TAG, "BLE device: $deviceId is cached")
+    }
+    val gatt: BluetoothGatt = remoteDevice.connectGatt(
+      context, false,
+      gattCallback, TRANSPORT_LE
+    )
+  }
+
+  /**
+   * Clears the internal cache and forces a refresh of the services from the
+   * remote device.
+   */
+  private fun refresh(gatt: BluetoothGatt){
+    Log.v(TAG, "BLE clear gatt service cache")
     try {
-      gatt.disconnect()
-    } catch (e: Exception) {
-      Log.v(TAG, "Error during BLE cleanConnection:", e)
-    } finally {
-      gatt.close()
-      Log.v(TAG, "BLE Gatt free up resources success")
+      // BluetoothGatt gatt
+      val refresh: Method = gatt.javaClass.getMethod("refresh")
+    if (refresh != null) {
+      refresh.invoke(gatt)
+    }
+  } catch (e: Exception) {
+      Log.v(TAG, "Error clear gatt service cache", e)
+  }
+  }
+
+  private val gattCallback = object : BluetoothGattCallback() {
+    override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+      Log.v(TAG, "onConnectionStateChange: device(${gatt.device.address}) status($status), newState($newState)")
+      val remoteDevice = bluetoothManager.adapter.getRemoteDevice(gatt.device.address)
+      val bondstate: Int = remoteDevice.getBondState()
+      if (newState == BluetoothGatt.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+        sendMessage(messageConnector, mapOf(
+          "deviceId" to gatt.device.address,
+          "ConnectionState" to "connected"
+        ))
+        if (bondstate == BluetoothDevice.BOND_NONE || bondstate == BluetoothDevice.BOND_BONDED) {
+          //prevent duplicates
+          gatt.let {
+            if (it !in knownGatts) {
+              knownGatts.add(it)
+            }
+          }
+          Log.v(TAG, "BLE device connected, start discoverServices")
+          gatt.discoverServices();
+        } else if (bondstate == BluetoothDevice.BOND_BONDING) {
+          Log.v(TAG, "BLE device connecting (BOND_BONDING)")
+        }
+      } else {
+        Log.v(TAG, "BLE device(${gatt.device.address}) disconnected")
+        gatt.close()
+        refresh(gatt);
+        knownGatts.remove(gatt)
+        Log.v(TAG, "Currently BLE knownGatts: $knownGatts")
+        sendMessage(messageConnector, mapOf(
+          "deviceId" to gatt.device.address,
+          "ConnectionState" to "disconnected"
+        ))
+      }
+    }
+
+    override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+//      Log.v(TAG, "onServicesDiscovered ${gatt.device.address} $status")
+      if (status != BluetoothGatt.GATT_SUCCESS) return
+
+      gatt.services?.forEach { service ->
+//        Log.v(TAG, "Service " + service.uuid)
+//        service.characteristics.forEach { characteristic ->
+//          Log.v(TAG, "    Characteristic ${characteristic.uuid}")
+//          characteristic.descriptors.forEach {
+//            Log.v(TAG, "        Descriptor ${it.uuid}")
+//          }
+//        }
+
+        sendMessage(messageConnector, mapOf(
+          "deviceId" to gatt.device.address,
+          "ServiceState" to "discovered",
+          "service" to service.uuid.toString(),
+          "characteristics" to service.characteristics.map { it.uuid.toString() }
+        ))
+      }
+    }
+
+    override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+      if (status == BluetoothGatt.GATT_SUCCESS) {
+        sendMessage(messageConnector, mapOf(
+          "mtuConfig" to mtu
+        ))
+      }
+    }
+
+    override fun onCharacteristicRead(
+      gatt: BluetoothGatt,
+      characteristic: BluetoothGattCharacteristic,
+      value: ByteArray,
+      status: Int,
+    ) {
+//      Log.v(TAG, "onCharacteristicRead ${characteristic.uuid}, ${characteristic.value.contentToString()}")
+      sendMessage(messageConnector, mapOf(
+        "deviceId" to gatt.device.address,
+        "characteristicValue" to mapOf(
+          "characteristic" to characteristic.uuid.toString(),
+          "value" to value
+        )
+      ))
+    }
+
+    override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic, status: Int) {
+      Log.v(TAG, "onCharacteristicWrite ${characteristic.uuid}, ${characteristic.value.contentToString()} $status")
+    }
+
+    override fun onCharacteristicChanged(
+      gatt: BluetoothGatt,
+      characteristic: BluetoothGattCharacteristic,
+      value: ByteArray,
+    ) {
+//      Log.v(TAG, "onCharacteristicChanged ${characteristic.uuid}, ${characteristic.value.contentToString()}")
+      sendMessage(messageConnector, mapOf(
+        "deviceId" to gatt.device.address,
+        "characteristicValue" to mapOf(
+          "characteristic" to characteristic.uuid.toString(),
+          "value" to value
+        )
+      ))
     }
   }
 
@@ -194,7 +329,15 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   private fun getConnectedDevices(bluetoothManager: BluetoothManager): List<BluetoothDevice> {
     var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
     Log.v(TAG, "Currently BLE connected devices: $btDevices")
+    Log.v(TAG, "Currently BLE knownGatts: $knownGatts")
     return btDevices
+  }
+
+  @SuppressLint("MissingPermission")
+  private fun getBondedDevices(bluetoothManager: BluetoothManager): Set<BluetoothDevice> {
+    var devices = bluetoothManager.adapter.bondedDevices
+    Log.v(TAG, "Currently BLE bonded Devices: $devices")
+    return devices
   }
 
   enum class AvailabilityState(val value: Int) {
@@ -264,89 +407,6 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     when (map["name"]) {
       "availabilityChange" -> availabilityChangeSink = null
       "scanResult" -> scanResultSink = null
-    }
-  }
-
-  private val gattCallback = object : BluetoothGattCallback() {
-    override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-      Log.v(TAG, "onConnectionStateChange: device(${gatt.device.address}) status($status), newState($newState)")
-      if (newState == BluetoothGatt.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
-        sendMessage(messageConnector, mapOf(
-          "deviceId" to gatt.device.address,
-          "ConnectionState" to "connected"
-        ))
-      } else {
-        knownGatts.remove(gatt)
-        sendMessage(messageConnector, mapOf(
-          "deviceId" to gatt.device.address,
-          "ConnectionState" to "disconnected"
-        ))
-      }
-    }
-
-    override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-      Log.v(TAG, "onServicesDiscovered ${gatt.device.address} $status")
-      if (status != BluetoothGatt.GATT_SUCCESS) return
-
-      gatt.services?.forEach { service ->
-        Log.v(TAG, "Service " + service.uuid)
-        service.characteristics.forEach { characteristic ->
-          Log.v(TAG, "    Characteristic ${characteristic.uuid}")
-          characteristic.descriptors.forEach {
-            Log.v(TAG, "        Descriptor ${it.uuid}")
-          }
-        }
-
-        sendMessage(messageConnector, mapOf(
-          "deviceId" to gatt.device.address,
-          "ServiceState" to "discovered",
-          "service" to service.uuid.toString(),
-          "characteristics" to service.characteristics.map { it.uuid.toString() }
-        ))
-      }
-    }
-
-    override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
-      if (status == BluetoothGatt.GATT_SUCCESS) {
-        sendMessage(messageConnector, mapOf(
-          "mtuConfig" to mtu
-        ))
-      }
-    }
-
-    override fun onCharacteristicRead(
-      gatt: BluetoothGatt,
-      characteristic: BluetoothGattCharacteristic,
-      value: ByteArray,
-      status: Int
-    ) {
-//      Log.v(TAG, "onCharacteristicRead ${characteristic.uuid}, ${characteristic.value.contentToString()}")
-      sendMessage(messageConnector, mapOf(
-        "deviceId" to gatt.device.address,
-        "characteristicValue" to mapOf(
-          "characteristic" to characteristic.uuid.toString(),
-          "value" to value
-        )
-      ))
-    }
-
-    override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic, status: Int) {
-      Log.v(TAG, "onCharacteristicWrite ${characteristic.uuid}, ${characteristic.value.contentToString()} $status")
-    }
-
-    override fun onCharacteristicChanged(
-      gatt: BluetoothGatt,
-      characteristic: BluetoothGattCharacteristic,
-      value: ByteArray
-    ) {
-//      Log.v(TAG, "onCharacteristicChanged ${characteristic.uuid}, ${characteristic.value.contentToString()}")
-      sendMessage(messageConnector, mapOf(
-        "deviceId" to gatt.device.address,
-        "characteristicValue" to mapOf(
-          "characteristic" to characteristic.uuid.toString(),
-          "value" to value
-        )
-      ))
     }
   }
 }
