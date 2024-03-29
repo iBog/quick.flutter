@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.*
 
+
 private const val TAG = "QuickBluePlugin"
 
 /** QuickBluePlugin */
@@ -318,9 +319,9 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       gatt: BluetoothGatt,
       characteristic: BluetoothGattCharacteristic,
       value: ByteArray,
-      status: Int
+      status: Int,
     ) {
-//      Log.v(TAG, "onCharacteristicRead ${characteristic.uuid}, ${characteristic.value.contentToString()}")
+      Log.v(TAG, "onCharacteristicRead (new) ${characteristic.uuid}, ${value.contentToString()}")
       sendMessage(messageConnector, mapOf(
         "deviceId" to gatt.device.address,
         "characteristicValue" to mapOf(
@@ -335,9 +336,28 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
     }
 
     override fun onCharacteristicChanged(
+      gatt: BluetoothGatt?,
+      characteristic: BluetoothGattCharacteristic?,
+    ) {
+      Log.v(TAG, "onCharacteristicChanged (old) ${characteristic?.uuid}, ${characteristic?.value?.contentToString()}")
+      val deviceAddress = gatt?.device?.address
+      if (deviceAddress!=null && characteristic!=null) {
+        sendMessage(
+          messageConnector, mapOf(
+            "deviceId" to deviceAddress,
+            "characteristicValue" to mapOf(
+              "characteristic" to characteristic.uuid.toString(),
+              "value" to characteristic.value
+            )
+          )
+        )
+      }
+    }
+
+    override fun onCharacteristicChanged(
       gatt: BluetoothGatt,
       characteristic: BluetoothGattCharacteristic,
-      value: ByteArray
+      value: ByteArray,
     ) {
 //      Log.v(TAG, "onCharacteristicChanged ${characteristic.uuid}, ${characteristic.value.contentToString()}")
       sendMessage(messageConnector, mapOf(
@@ -367,6 +387,7 @@ fun BluetoothGatt.getCharacteristic(service: String, characteristic: String): Bl
 
 private val DESC__CLIENT_CHAR_CONFIGURATION = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
+@SuppressLint("MissingPermission")
 fun BluetoothGatt.setNotifiable(gattCharacteristic: BluetoothGattCharacteristic, bleInputProperty: String) {
   val descriptor = gattCharacteristic.getDescriptor(DESC__CLIENT_CHAR_CONFIGURATION)
   val (value, enable) = when (bleInputProperty) {
@@ -377,9 +398,40 @@ fun BluetoothGatt.setNotifiable(gattCharacteristic: BluetoothGattCharacteristic,
   // Enable or disable notifications/indications for the characteristic
   val isNotificationSet = setCharacteristicNotification(descriptor.characteristic, enable)
   Log.v(TAG, "setNotifiable, setCharacteristicNotification success: $isNotificationSet")
-  // If notifications were successfully set, write the descriptor back to the server
-  if (isNotificationSet) {
-    val isDescriptorWritten = writeDescriptor(descriptor, value)
-    Log.v(TAG, "setNotifiable, writeDescriptor success: $isNotificationSet, isWritten: $isDescriptorWritten")
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // If notifications were successfully set, write the descriptor back to the server
+        writeDescriptor(descriptor, value)
+  } else {
+    Log.v(TAG, "setNotifiable, for old android version: ${Build.VERSION.SDK_INT}")
+    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+    var isWriteDescriptorSuccess = false
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      isWriteDescriptorSuccess = writeDescriptor(descriptor);
+    } else {
+      isWriteDescriptorSuccess = internalWriteDescriptorWorkaround(descriptor);
+    }
+    Log.v(TAG, "writeDescriptor, isWriteDescriptorSuccess: $isWriteDescriptorSuccess")
   }
+}
+
+/**
+ * There was a bug in Android up to 6.0 where the descriptor was written using parent
+ * characteristic's write type, instead of always Write With Response, as the spec says.
+ *
+ *
+ * See: [
+ * https://android.googlesource.com/platform/frameworks/base/+/942aebc95924ab1e7ea1e92aaf4e7fc45f695a6c%5E%21/#F0](https://android.googlesource.com/platform/frameworks/base/+/942aebc95924ab1e7ea1e92aaf4e7fc45f695a6c%5E%21/#F0)
+ *
+ * @param descriptor the descriptor to be written
+ * @return the result of [BluetoothGatt.writeDescriptor]
+ */
+@SuppressLint("MissingPermission")
+fun BluetoothGatt.internalWriteDescriptorWorkaround(descriptor: BluetoothGattDescriptor?): Boolean {
+  if (descriptor == null) return false
+  val parentCharacteristic = descriptor.characteristic
+  val originalWriteType = parentCharacteristic.writeType
+  parentCharacteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+  val result = writeDescriptor(descriptor)
+  parentCharacteristic.writeType = originalWriteType
+  return result
 }
