@@ -83,19 +83,20 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       }
       "startScan" -> {
         //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
-        getConnectedDevices(bluetoothManager)
-        getBondedDevices(bluetoothManager)
-//        if (connected) {
-//          connectToDevice("88:4A:EA:82:B0:6A")
-//          result.success(null)
-//        } else {
+//        getConnectedDevices(bluetoothManager)
+//        getBondedDevices(bluetoothManager)
+        var connectedDevice = isAnyDeviceConnected()
+        if (connectedDevice!=null) {
+          connectToDevice(connectedDevice.address)
+          result.success(null)
+        } else {
           val builder = ScanSettings.Builder()
           builder.setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
           builder.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
           bluetoothManager.adapter?.bluetoothLeScanner?.startScan(emptyList(), builder.build(), scanCallback)
 //          bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
           result.success(null)
-//        }
+        }
       }
       "stopScan" -> {
         bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback)
@@ -186,32 +187,38 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
   }
 
   private fun isDeviceConnected():Boolean {
-    var btDevices = getConnectedDevices(bluetoothManager)
-    if (btDevices.find { it.address == "88:4A:EA:82:B0:6A" } != null) {
-      return true
-    }
-    return false
+    val targetAddress = "88:4A:EA:82:B0:6A"
+    return getConnectedDevices(bluetoothManager).any { it.address == targetAddress } ||
+            knownGatts.any { it.device.address == targetAddress }
   }
 
-  private fun connectToDevice(deviceId: String){
-    val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId)
-      val deviceType: Int = remoteDevice.getType()
-    if(deviceType == BluetoothDevice.DEVICE_TYPE_UNKNOWN) {
-      Log.v(TAG, "BLE device: $deviceId was not cached")
+  private fun isAnyDeviceConnected():BluetoothDevice? {
+    var btDevices = getConnectedDevices(bluetoothManager)
+      if (btDevices.isNotEmpty()) {
+        return btDevices.first()
+      } else if (knownGatts.isNotEmpty()) {
+        return knownGatts.first().device
+      }
+    return null
+  }
+
+  private fun connectToDevice(deviceId: String) {
+    val remoteDevice = bluetoothManager.adapter.getRemoteDevice(deviceId as String)
+    var gatt: BluetoothGatt? = null
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      gatt = remoteDevice.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
     } else {
-      Log.v(TAG, "BLE device: $deviceId is cached")
+      gatt = remoteDevice.connectGatt(context, false, gattCallback)
     }
-    val gatt: BluetoothGatt = remoteDevice.connectGatt(
-      context, false,
-      gattCallback, TRANSPORT_LE
-    )
+  //moved to onConnectionStateChange
+  //gatt?.let { knownGatts.add(it) }
   }
 
   /**
    * Clears the internal cache and forces a refresh of the services from the
    * remote device.
    */
-  private fun refresh(gatt: BluetoothGatt){
+  private fun refresh(gatt: BluetoothGatt) {
     Log.v(TAG, "BLE clear gatt service cache")
     try {
       // BluetoothGatt gatt
@@ -249,7 +256,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       } else {
         Log.v(TAG, "BLE device(${gatt.device.address}) disconnected")
         gatt.close()
-        refresh(gatt);
+//        refresh(gatt);
         knownGatts.remove(gatt)
         Log.v(TAG, "Currently BLE knownGatts: $knownGatts")
         sendMessage(messageConnector, mapOf(
@@ -307,6 +314,25 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
 
     override fun onCharacteristicWrite(gatt: BluetoothGatt?, characteristic: BluetoothGattCharacteristic, status: Int) {
       Log.v(TAG, "onCharacteristicWrite ${characteristic.uuid}, ${characteristic.value.contentToString()} $status")
+    }
+
+    override fun onCharacteristicChanged(
+      gatt: BluetoothGatt?,
+      characteristic: BluetoothGattCharacteristic?,
+    ) {
+      Log.v(TAG, "onCharacteristicChanged (old) ${characteristic?.uuid}, ${characteristic?.value?.contentToString()}")
+      val deviceAddress = gatt?.device?.address
+      if (deviceAddress!=null && characteristic!=null) {
+        sendMessage(
+          messageConnector, mapOf(
+            "deviceId" to deviceAddress,
+            "characteristicValue" to mapOf(
+              "characteristic" to characteristic.uuid.toString(),
+              "value" to characteristic.value
+            )
+          )
+        )
+      }
     }
 
     override fun onCharacteristicChanged(
@@ -427,6 +453,7 @@ fun BluetoothGatt.getCharacteristic(service: String, characteristic: String): Bl
 
 private val DESC__CLIENT_CHAR_CONFIGURATION = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
+@SuppressLint("MissingPermission")
 fun BluetoothGatt.setNotifiable(gattCharacteristic: BluetoothGattCharacteristic, bleInputProperty: String) {
   val descriptor = gattCharacteristic.getDescriptor(DESC__CLIENT_CHAR_CONFIGURATION)
   val (value, enable) = when (bleInputProperty) {
@@ -437,9 +464,40 @@ fun BluetoothGatt.setNotifiable(gattCharacteristic: BluetoothGattCharacteristic,
   // Enable or disable notifications/indications for the characteristic
   val isNotificationSet = setCharacteristicNotification(descriptor.characteristic, enable)
   Log.v(TAG, "setNotifiable, setCharacteristicNotification success: $isNotificationSet")
-  // If notifications were successfully set, write the descriptor back to the server
-  if (isNotificationSet) {
-    val isDescriptorWritten = writeDescriptor(descriptor, value)
-    Log.v(TAG, "setNotifiable, writeDescriptor success: $isNotificationSet, isWritten: $isDescriptorWritten")
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    // If notifications were successfully set, write the descriptor back to the server
+    writeDescriptor(descriptor, value)
+  } else {
+    Log.v(TAG, "setNotifiable, for old android version: ${Build.VERSION.SDK_INT}")
+    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+    var isWriteDescriptorSuccess = false
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      isWriteDescriptorSuccess = writeDescriptor(descriptor);
+    } else {
+      isWriteDescriptorSuccess = internalWriteDescriptorWorkaround(descriptor);
+    }
+    Log.v(TAG, "writeDescriptor, isWriteDescriptorSuccess: $isWriteDescriptorSuccess")
   }
+}
+
+/**
+ * There was a bug in Android up to 6.0 where the descriptor was written using parent
+ * characteristic's write type, instead of always Write With Response, as the spec says.
+ *
+ *
+ * See: [
+ * https://android.googlesource.com/platform/frameworks/base/+/942aebc95924ab1e7ea1e92aaf4e7fc45f695a6c%5E%21/#F0](https://android.googlesource.com/platform/frameworks/base/+/942aebc95924ab1e7ea1e92aaf4e7fc45f695a6c%5E%21/#F0)
+ *
+ * @param descriptor the descriptor to be written
+ * @return the result of [BluetoothGatt.writeDescriptor]
+ */
+@SuppressLint("MissingPermission")
+fun BluetoothGatt.internalWriteDescriptorWorkaround(descriptor: BluetoothGattDescriptor?): Boolean {
+  if (descriptor == null) return false
+  val parentCharacteristic = descriptor.characteristic
+  val originalWriteType = parentCharacteristic.writeType
+  parentCharacteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+  val result = writeDescriptor(descriptor)
+  parentCharacteristic.writeType = originalWriteType
+  return result
 }
