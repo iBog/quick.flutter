@@ -80,10 +80,32 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         result.success(bluetoothManager.adapter?.isEnabled?:false)
       }
       "startScan" -> {
+        var btDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT)
+        if (btDevices.isNotEmpty()) {
         //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
-        var btDevices = getConnectedDevices(bluetoothManager)
+          var gatt: BluetoothGatt? = null
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+              gatt = btDevices.first().connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+          } else {
+              gatt = btDevices.first().connectGatt(context, true, gattCallback)
+          }
+          gatt?.let { knownGatts.add(it) }
+          result.success(null)
+        } else if (knownGatts.isNotEmpty()) {
+          var gatt: BluetoothGatt? = null
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            gatt = knownGatts.first().device.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+          } else {
+            gatt = knownGatts.first().device.connectGatt(context, true, gattCallback)
+          }
+          if (gatt == null) {
+            bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
+          }
+          result.success(null)
+        } else {
           bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
           result.success(null)
+        }
       }
       "stopScan" -> {
         bluetoothManager.adapter?.bluetoothLeScanner?.stopScan(scanCallback)
@@ -339,7 +361,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       gatt: BluetoothGatt?,
       characteristic: BluetoothGattCharacteristic?,
     ) {
-      Log.v(TAG, "onCharacteristicChanged (old) ${characteristic?.uuid}, ${characteristic?.value?.contentToString()}")
+//      Log.v(TAG, "onCharacteristicChanged (old) ${characteristic?.uuid}, ${characteristic?.value?.contentToString()}")
       val deviceAddress = gatt?.device?.address
       if (deviceAddress!=null && characteristic!=null) {
         sendMessage(
