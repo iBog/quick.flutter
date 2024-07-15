@@ -85,18 +85,18 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
         //https://stackoverflow.com/questions/73107781/devices-with-android-12-keep-bluetooth-le-connection-even-when-app-is-closed
           var gatt: BluetoothGatt? = null
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-              gatt = btDevices.first().connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+              gatt = btDevices.first().connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
           } else {
-              gatt = btDevices.first().connectGatt(context, false, gattCallback)
+              gatt = btDevices.first().connectGatt(context, true, gattCallback)
           }
           gatt?.let { knownGatts.add(it) }
           result.success(null)
         } else if (knownGatts.isNotEmpty()) {
           var gatt: BluetoothGatt? = null
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            gatt = knownGatts.first().device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            gatt = knownGatts.first().device.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
           } else {
-            gatt = knownGatts.first().device.connectGatt(context, false, gattCallback)
+            gatt = knownGatts.first().device.connectGatt(context, true, gattCallback)
           }
           if (gatt == null) {
             bluetoothManager.adapter?.bluetoothLeScanner?.startScan(scanCallback)
@@ -361,7 +361,7 @@ class QuickBluePlugin: FlutterPlugin, MethodCallHandler, EventChannel.StreamHand
       gatt: BluetoothGatt?,
       characteristic: BluetoothGattCharacteristic?,
     ) {
-//      Log.v(TAG, "onCharacteristicChanged (old) ${characteristic?.uuid}, ${characteristic?.value?.contentToString()}")
+      Log.v(TAG, "onCharacteristicChanged (old) ${characteristic?.uuid}, ${characteristic?.value?.contentToString()}")
       val deviceAddress = gatt?.device?.address
       if (deviceAddress!=null && characteristic!=null) {
         sendMessage(
